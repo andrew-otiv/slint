@@ -167,14 +167,21 @@ impl<C: slint::ComponentHandle + 'static> Drop for Player<C> {
 }
 
 pub fn main() -> Result<(), anyhow::Error> {
-    let main_window = MainWindow::new()?;
+    let video_window = MainWindow::new()?;
+    let button_window = OtherWindow::new()?;
 
-    let mut player = Player::new(main_window.as_weak())?;
 
-    let mw_weak = main_window.as_weak();
+    // button_window.show()?; // Also works
+
+    let mut player = Player::new(video_window.as_weak())?;
+
+    button_window.show()?; // Also works
+
+    let main_window_weak = video_window.as_weak();
+    // let second_window_weak = button_window.as_weak();
 
     if let Err(error) =
-        main_window.window().set_rendering_notifier(move |state, graphics_api| match state {
+        video_window.window().set_rendering_notifier(move |state, graphics_api| match state {
             slint::RenderingState::RenderingSetup => {
                 player.setup_graphics(graphics_api);
             }
@@ -202,7 +209,7 @@ pub fn main() -> Result<(), anyhow::Error> {
 
                         if let Some(texture) = frame.texture_id(0).and_then(|id| id.try_into().ok())
                         {
-                            mw_weak.unwrap().set_texture(unsafe {
+                            main_window_weak.unwrap().set_texture(unsafe {
                                 slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
                                     texture,
                                     [frame.width(), frame.height()].into(),
@@ -223,6 +230,14 @@ pub fn main() -> Result<(), anyhow::Error> {
         std::process::exit(1);
     };
 
-    main_window.run()?;
+    // Works
+    button_window.show()?;
+    video_window.run()?;
+
+    // Video stays black
+    // video_window.show()?;
+    // button_window.run()?;
+
     Ok(())
+
 }

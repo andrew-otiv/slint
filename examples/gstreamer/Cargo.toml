@@ -15,7 +15,7 @@ path = "main.rs"
 name = "gstreamer"
 
 [dependencies]
-slint = { path = "../../api/rs/slint" }
+slint = { version="1.7.0", default-features=false, features=["compat-1-2","std","backend-winit", "renderer-skia-opengl"] }
 
 gstreamer = "0.18.0"
 gstreamer-app = "0.18.0"
