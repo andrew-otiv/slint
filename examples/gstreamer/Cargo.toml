@@ -23,7 +23,8 @@ gstreamer-gl-egl = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs
 gstreamer-app = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc", features = ["v1_24"]}
 gstreamer-video = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc", features = ["v1_24", "serde"]}
 anyhow = "1.0"
-glutin_egl_sys = "0.1.5"
+#glutin_egl_sys = "0.1.5"
+glutin_egl_sys = "0.7.0"
 
 [build-dependencies]
 slint-build = { path = "../../api/rs/build" }
