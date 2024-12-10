@@ -3,12 +3,13 @@
 
 use gstreamer::prelude::*;
 use gstreamer_gl::prelude::*;
+use gstreamer_gl::GLVideoFrameExt;
+use gstreamer_video::VideoFrameExt;
 
 slint::include_modules!();
 
 struct Player<C: slint::ComponentHandle + 'static> {
     app: slint::Weak<C>,
-    //pipeline: gstreamer::Pipeline,
     pipeline: gstreamer::Element,
     appsink: gstreamer_app::AppSink,
     current_sample: std::sync::Arc<std::sync::Mutex<Option<gstreamer::Sample>>>,
@@ -19,10 +20,10 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
     fn new(app: slint::Weak<C>) -> Result<Self, anyhow::Error> {
         gstreamer::init()?;
 
-        let source = gstreamer::ElementFactory::make("playbin", None)?;
+        let source = gstreamer::ElementFactory::make("playbin").build()?;
         source.set_property("uri", "https://www.freedesktop.org/software/gstreamer-sdk/data/media/sintel_trailer-480p.webm");
 
-        let appsink = gstreamer::ElementFactory::make("appsink", None)?
+        let appsink = gstreamer::ElementFactory::make("appsink").build()?
             .dynamic_cast::<gstreamer_app::AppSink>()
             .unwrap();
 
@@ -31,13 +32,13 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
         appsink.set_property("max-buffers", 1u32);
 
         let caps = gstreamer::Caps::builder("video/x-raw")
-            .features(&[&gstreamer_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
+            .features([gstreamer_gl::CAPS_FEATURE_MEMORY_GL_MEMORY])
             .field("format", gstreamer_video::VideoFormat::Rgba.to_str())
             .field("texture-target", "2D")
             .build();
         appsink.set_caps(Some(&caps));
 
-        let glsink = gstreamer::ElementFactory::make("glsinkbin", None)?;
+        let glsink = gstreamer::ElementFactory::make("glsinkbin").build()?;
         glsink.set_property("sink", &appsink);
 
         source.set_property("video-sink", &glsink);
@@ -96,7 +97,7 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
                         if ctx_type == *gstreamer_gl::GL_DISPLAY_CONTEXT_TYPE {
                             if let Some(element) = msg
                                 .src()
-                                .map(|source| source.downcast::<gstreamer::Element>().unwrap())
+                                .map(|source| source.clone().downcast::<gstreamer::Element>().unwrap())
                             {
                                 let gst_context = gstreamer::Context::new(ctx_type, true);
                                 gst_context.set_gl_display(&gst_gl_display);
@@ -105,7 +106,7 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
                         } else if ctx_type == "gst.gl.app_context" {
                             if let Some(element) = msg
                                 .src()
-                                .map(|source| source.downcast::<gstreamer::Element>().unwrap())
+                                .map(|source| source.clone().downcast::<gstreamer::Element>().unwrap())
                             {
                                 let mut gst_context = gstreamer::Context::new(ctx_type, true);
                                 {
@@ -119,7 +120,6 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
                     }
                     _ => (),
                 }
-                // forward event
 
                 gstreamer::BusSyncReply::Pass
             }
@@ -137,7 +137,6 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
                     let sample = appsink.pull_sample().unwrap();
 
                     {
-                        //let buffer = sample.buffer().unwrap();
                         let _info = sample
                             .caps()
                             .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
@@ -167,76 +166,46 @@ impl<C: slint::ComponentHandle + 'static> Drop for Player<C> {
 }
 
 pub fn main() -> Result<(), anyhow::Error> {
-    let video_window = MainWindow::new()?;
+    let main_window = MainWindow::new()?;
     let button_window = OtherWindow::new()?;
+    let main_window_clone = main_window.clone_strong();
+
+    let mut player = Player::new(main_window.as_weak())?;
 
 
-    // button_window.show()?; // Also works
-
-    let mut player = Player::new(video_window.as_weak())?;
-
-    button_window.show()?; // Also works
-
-    let main_window_weak = video_window.as_weak();
-    // let second_window_weak = button_window.as_weak();
-
-    if let Err(error) =
-        video_window.window().set_rendering_notifier(move |state, graphics_api| match state {
-            slint::RenderingState::RenderingSetup => {
-                player.setup_graphics(graphics_api);
-            }
-            slint::RenderingState::RenderingTeardown => {
-                todo!()
-            }
-            slint::RenderingState::BeforeRendering => {
-                if let Some(sample) = player.current_sample.lock().unwrap().as_ref() {
-                    let buffer = sample.buffer_owned().unwrap();
-                    let info = sample
-                        .caps()
-                        .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
-                        .unwrap();
-
-                    {
-                        // let sync_meta = buffer.meta::<gstreamer_gl::GLSyncMeta>().unwrap();
-                        // sync_meta.set_sync_point(player.gst_gl_context.as_ref().unwrap());
-                    }
-
-                    if let Ok(frame) =
-                        gstreamer_video::VideoFrame::from_buffer_readable_gl(buffer, &info)
-                    {
-                        //let sync_meta = frame.buffer().meta::<gstreamer_gl::GLSyncMeta>().unwrap();
-                        //sync_meta.wait(player.gst_gl_context.as_ref().unwrap());
-
-                        if let Some(texture) = frame.texture_id(0).and_then(|id| id.try_into().ok())
-                        {
-                            main_window_weak.unwrap().set_texture(unsafe {
-                                slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
-                                    texture,
-                                    [frame.width(), frame.height()].into(),
-                                )
-                                .build()
-                            });
-                        }
-                    }
+    main_window.window().set_rendering_notifier(move |state, graphics_api| match state {
+        slint::RenderingState::RenderingSetup => {
+            player.setup_graphics(graphics_api);
+        },
+        slint::RenderingState::RenderingTeardown => {
+            todo!()
+        },
+        slint::RenderingState::BeforeRendering => {
+            if let Some(sample) = player.current_sample.lock().unwrap().as_ref() {
+                let buffer = sample.buffer_owned().unwrap();
+                let info = sample
+                    .caps()
+                    .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
+                    .unwrap();
+                if let Ok(current_frame) = gstreamer_gl::GLVideoFrame::from_buffer_readable(buffer, &info){
+                    let texture = current_frame.texture_id(0).expect("Failed to get gl texture id");
+                    let texture =
+                        std::num::NonZero::try_from(texture).expect("Failed to get non zero texture id");
+                    let size = [current_frame.width(), current_frame.height()].into();
+                    let image =
+                        unsafe { slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(texture, size) };
+                    let image = image.build();
+                    main_window_clone.global::<MainCameraAdapter>().set_video_frame(image.clone())
                 }
             }
-            _ => {} // Nothing to do
-        })
-    {
-        match error {
-            slint::SetRenderingNotifierError::Unsupported => eprintln!("This example requires the use of the GL backend. Please run with the environment variable SLINT_BACKEND=GL set."),
-            _ => unreachable!()
-        }
-        std::process::exit(1);
-    };
+        },
+        _ => {},
+    }
+    )?;
 
-    // Works
     button_window.show()?;
-    video_window.run()?;
+    main_window.run()?;
 
-    // Video stays black
-    // video_window.show()?;
-    // button_window.run()?;
 
     Ok(())
 

@@ -17,12 +17,11 @@ name = "gstreamer"
 [dependencies]
 slint = { version="1.7.0", default-features=false, features=["compat-1-2","std","backend-winit", "renderer-skia-opengl"] }
 
-gstreamer = "0.18.0"
-gstreamer-app = "0.18.0"
-gstreamer-gl = "0.18.0"
-gstreamer-gl-egl = "0.18.0"
-gstreamer-video = "0.18.0"
-
+gstreamer = { git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc" , features = ["v1_24", "serde"]}
+gstreamer-gl = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc"}
+gstreamer-gl-egl = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc", features = ["v1_24",]}
+gstreamer-app = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc", features = ["v1_24"]}
+gstreamer-video = {git = "https://gitlab.freedesktop.org/gstreamer/gstreamer-rs", rev = "36eca7cc", features = ["v1_24", "serde"]}
 anyhow = "1.0"
 glutin_egl_sys = "0.1.5"
 

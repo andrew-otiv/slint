@@ -1,7 +1,12 @@
 // Copyright © SixtyFPS GmbH <info@slint-ui.com>
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-commercial
 
+
 import {HorizontalBox, VerticalBox, Button} from "std-widgets.slint";
+
+export global MainCameraAdapter {
+    in_out property <image> video_frame;
+}
 
 export component MainWindow inherits Window {
     preferred-width: 500px;
@@ -14,6 +19,7 @@ export component MainWindow inherits Window {
         img := Image {
             width: 320px;
             height: 200px;
+            source: MainCameraAdapter.video_frame;
         }
     }
 }
