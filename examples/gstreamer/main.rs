@@ -23,7 +23,8 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
         let source = gstreamer::ElementFactory::make("playbin").build()?;
         source.set_property("uri", "https://www.freedesktop.org/software/gstreamer-sdk/data/media/sintel_trailer-480p.webm");
 
-        let appsink = gstreamer::ElementFactory::make("appsink").build()?
+        let appsink = gstreamer::ElementFactory::make("appsink")
+            .build()?
             .dynamic_cast::<gstreamer_app::AppSink>()
             .unwrap();
 
@@ -69,6 +70,7 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
             let display =
                 gstreamer_gl_egl::GLDisplayEGL::with_egl_display(egl_display as usize).unwrap();
             let native_context = egl.GetCurrentContext();
+            println!("Created GL context");
 
             (
                 gstreamer_gl::GLContext::new_wrapped(
@@ -95,19 +97,17 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
                     gstreamer::MessageView::NeedContext(ctx) => {
                         let ctx_type = ctx.context_type();
                         if ctx_type == *gstreamer_gl::GL_DISPLAY_CONTEXT_TYPE {
-                            if let Some(element) = msg
-                                .src()
-                                .map(|source| source.clone().downcast::<gstreamer::Element>().unwrap())
-                            {
+                            if let Some(element) = msg.src().map(|source| {
+                                source.clone().downcast::<gstreamer::Element>().unwrap()
+                            }) {
                                 let gst_context = gstreamer::Context::new(ctx_type, true);
                                 gst_context.set_gl_display(&gst_gl_display);
                                 element.set_context(&gst_context);
                             }
                         } else if ctx_type == "gst.gl.app_context" {
-                            if let Some(element) = msg
-                                .src()
-                                .map(|source| source.clone().downcast::<gstreamer::Element>().unwrap())
-                            {
+                            if let Some(element) = msg.src().map(|source| {
+                                source.clone().downcast::<gstreamer::Element>().unwrap()
+                            }) {
                                 let mut gst_context = gstreamer::Context::new(ctx_type, true);
                                 {
                                     let gst_context = gst_context.get_mut().unwrap();
@@ -145,11 +145,13 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
 
                     let current_sample_ref = current_sample_ref.clone();
 
-                    app_weak.upgrade_in_event_loop(move |app| {
-                        *current_sample_ref.lock().unwrap() = Some(sample);
+                    app_weak
+                        .upgrade_in_event_loop(move |app| {
+                            *current_sample_ref.lock().unwrap() = Some(sample);
 
-                        app.window().request_redraw();
-                    }).ok();
+                            app.window().request_redraw();
+                        })
+                        .ok();
                     Ok(gstreamer::FlowSuccess::Ok)
                 })
                 .build(),
@@ -166,47 +168,70 @@ impl<C: slint::ComponentHandle + 'static> Drop for Player<C> {
 }
 
 pub fn main() -> Result<(), anyhow::Error> {
-    let main_window = MainWindow::new()?;
+    let video_window1 = MainWindow::new()?;
+    let video_window2 = MainWindow::new()?;
     let button_window = OtherWindow::new()?;
-    let main_window_clone = main_window.clone_strong();
+    let video_window1_clone = video_window1.clone_strong();
+    let video_window2_clone = video_window2.clone_strong();
 
-    let mut player = Player::new(main_window.as_weak())?;
+    // let mut player1 = Player::new(video_window1.as_weak())?;
+    // let mut player2 = Player::new(video_window2.as_weak())?;
 
-
-    main_window.window().set_rendering_notifier(move |state, graphics_api| match state {
-        slint::RenderingState::RenderingSetup => {
-            player.setup_graphics(graphics_api);
-        },
-        slint::RenderingState::RenderingTeardown => {
-            todo!()
-        },
-        slint::RenderingState::BeforeRendering => {
-            if let Some(sample) = player.current_sample.lock().unwrap().as_ref() {
-                let buffer = sample.buffer_owned().unwrap();
-                let info = sample
-                    .caps()
-                    .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
-                    .unwrap();
-                if let Ok(current_frame) = gstreamer_gl::GLVideoFrame::from_buffer_readable(buffer, &info){
-                    let texture = current_frame.texture_id(0).expect("Failed to get gl texture id");
-                    let texture =
-                        std::num::NonZero::try_from(texture).expect("Failed to get non zero texture id");
-                    let size = [current_frame.width(), current_frame.height()].into();
-                    let image =
-                        unsafe { slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(texture, size) };
-                    let image = image.build();
-                    main_window_clone.global::<MainCameraAdapter>().set_video_frame(image.clone())
+    fn set_rendering_notifier(video_window: MainWindow, // , player: &mut Player<MainWindow>
+    ) {
+        // let video_window = (*video_window).clone_strong();
+        // let player = player.clone_mut();
+        let video_window_weak = video_window.as_weak();
+        let video_window_weak2 = video_window.as_weak();
+        let mut player = Player::new(video_window_weak).unwrap();
+        let video_window_window = video_window.window();
+        video_window_window
+            .set_rendering_notifier(move |state, graphics_api| match state {
+                slint::RenderingState::RenderingSetup => {
+                    player.setup_graphics(graphics_api);
                 }
-            }
-        },
-        _ => {},
+                slint::RenderingState::RenderingTeardown => {
+                    todo!()
+                }
+                slint::RenderingState::BeforeRendering => {
+                    if let Some(sample) = player.current_sample.lock().unwrap().as_ref() {
+                        let buffer = sample.buffer_owned().unwrap();
+                        let info = sample
+                            .caps()
+                            .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
+                            .unwrap();
+                        if let Ok(current_frame) =
+                            gstreamer_gl::GLVideoFrame::from_buffer_readable(buffer, &info)
+                        {
+                            let texture =
+                                current_frame.texture_id(0).expect("Failed to get gl texture id");
+                            let texture = std::num::NonZero::try_from(texture)
+                                .expect("Failed to get non zero texture id");
+                            let size = [current_frame.width(), current_frame.height()].into();
+                            let image = unsafe {
+                                slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
+                                    texture, size,
+                                )
+                            };
+                            let image = image.build();
+                            video_window_weak2
+                                .upgrade()
+                                .unwrap()
+                                .global::<MainCameraAdapter>()
+                                .set_video_frame(image.clone())
+                        }
+                    }
+                }
+                _ => {}
+            })
+            .unwrap();
     }
-    )?;
+    set_rendering_notifier(video_window1_clone);
+    set_rendering_notifier(video_window2_clone);
 
     button_window.show()?;
-    main_window.run()?;
-
+    video_window2.show()?;
+    video_window1.run()?;
 
     Ok(())
-
 }
