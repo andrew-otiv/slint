@@ -4,6 +4,7 @@
 use std::sync::{Arc, Mutex};
 
 use gstreamer::prelude::*;
+use gstreamer::Sample;
 use gstreamer_gl::prelude::*;
 use gstreamer_gl::GLVideoFrameExt;
 use gstreamer_video::VideoFrameExt;
@@ -145,7 +146,7 @@ impl<C: slint::ComponentHandle + 'static> Player<C> {
     }
 }
 
-impl<C: slint::ComponentHandle> PerWindowData<C> {
+impl<C: slint::ComponentHandle + 'static> PerWindowData<C> {
     fn setup_graphics(&self, graphics_api: &slint::GraphicsAPI) {
         let egl = match graphics_api {
             slint::GraphicsAPI::NativeOpenGL { get_proc_address } => {
@@ -224,78 +225,89 @@ impl<C: slint::ComponentHandle> PerWindowData<C> {
     }
 }
 
-impl<C: slint::ComponentHandle + 'static> Drop for Player<C> {
-    fn drop(&mut self) {
-        self.pipeline.send_event(gstreamer::event::Eos::new());
-        self.pipeline.set_state(gstreamer::State::Null).unwrap();
-        eprintln!("Player drop");
-    }
-}
+// impl<C: slint::ComponentHandle + 'static> Drop for Player<C> {
+//     fn drop(&mut self) {
+//         self.pipeline.send_event(gstreamer::event::Eos::new());
+//         self.pipeline.set_state(gstreamer::State::Null).unwrap();
+//         eprintln!("Player drop");
+//     }
+// }
 
 pub trait SetRenderingNotifier {
-    fn set_rendering_notifier(per_window_data: &'static PerWindowData<VideoWindow>);
+    fn per_window_data_set_rendering_notifier(&'static self);
 }
 
-impl SetRenderingNotifier for PerWindowData<> {
-fn set_rendering_notifier(per_window_data: &'static PerWindowData<VideoWindow>) {
-    let video_window = per_window_data.window.upgrade().unwrap();
-    let video_window_ = video_window.clone_strong();
-    let video_window__ = video_window.clone_strong();
-    let video_window_window = video_window__.window();
-    video_window_window
-        .set_rendering_notifier(move |state, graphics_api| match state {
-            slint::RenderingState::RenderingSetup => {
-                per_window_data.setup_graphics(graphics_api);
-            }
-            slint::RenderingState::RenderingTeardown => {
-                todo!()
-            }
-            slint::RenderingState::BeforeRendering => {
-                if let Some(sample) = per_window_data.current_sample.lock().unwrap().as_ref() {
-                    let buffer = sample.buffer_owned().unwrap();
-                    let info = sample
-                        .caps()
-                        .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
-                        .unwrap();
-                    if let Ok(current_frame) =
-                        gstreamer_gl::GLVideoFrame::from_buffer_readable(buffer, &info)
-                    {
-                        let texture =
-                            current_frame.texture_id(0).expect("Failed to get gl texture id");
-                        let texture = std::num::NonZero::try_from(texture)
-                            .expect("Failed to get non zero texture id");
-                        let size = [current_frame.width(), current_frame.height()].into();
-                        let image = unsafe {
-                            slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
-                                texture, size,
-                            )
-                        };
-                        let image = image.build();
-                        video_window_.global::<MainCameraAdapter>().set_video_frame(image.clone())
+impl<'W, C: slint::ComponentHandle + 'static> SetRenderingNotifier for PerWindowData<C>
+where
+    MainCameraAdapter<'W>: slint::Global<'W, C>,
+{
+    fn per_window_data_set_rendering_notifier(&self) {
+        let video_window = self.window.upgrade().unwrap();
+        let video_window_ = video_window.clone_strong();
+        let video_window__ = video_window.clone_strong();
+        let video_window_window = video_window__.window();
+        let current_sample = self.current_sample.clone();
+        fn set_rendering_notifier_callback(
+            state: slint::RenderingState,
+            graphics_api: &slint::GraphicsAPI<'_>,
+            current_sample: Arc<Mutex<Option<Sample>>>,
+            video_window_: C,
+        ) {
+            match state {
+                slint::RenderingState::RenderingSetup => {
+                    self.setup_graphics(graphics_api);
+                }
+                slint::RenderingState::RenderingTeardown => {
+                    todo!()
+                }
+                slint::RenderingState::BeforeRendering => {
+                    if let Some(sample) = current_sample.lock().unwrap().as_ref() {
+                        let buffer = sample.buffer_owned().unwrap();
+                        let info = sample
+                            .caps()
+                            .map(|caps| gstreamer_video::VideoInfo::from_caps(caps).unwrap())
+                            .unwrap();
+                        if let Ok(current_frame) =
+                            gstreamer_gl::GLVideoFrame::from_buffer_readable(buffer, &info)
+                        {
+                            let texture =
+                                current_frame.texture_id(0).expect("Failed to get gl texture id");
+                            let texture = std::num::NonZero::try_from(texture)
+                                .expect("Failed to get non zero texture id");
+                            let size = [current_frame.width(), current_frame.height()].into();
+                            let image = unsafe {
+                                slint::BorrowedOpenGLTextureBuilder::new_gl_2d_rgba_texture(
+                                    texture, size,
+                                )
+                            };
+                            let image = image.build();
+                            video_window_
+                                .global::<MainCameraAdapter>()
+                                .set_video_frame(image.clone())
+                        }
                     }
                 }
+                _ => {}
             }
-            _ => {}
-        })
-        .unwrap();
+        }
+        video_window_window.set_rendering_notifier(set_rendering_notifier_callback).unwrap();
+    }
 }
 
 pub fn main() -> Result<(), anyhow::Error> {
     let video_window1 = VideoWindow::new()?;
     let video_window2 = VideoWindow::new()?;
     let button_window = OtherWindow::new()?;
-    let video_window1_clone = video_window1.clone_strong();
-    let video_window2_clone = video_window2.clone_strong();
 
     let mut player = Player::new(video_window1.as_weak(), video_window2.as_weak())?;
 
     player.setup_bus_handler();
 
-    let gst_gl_context: Arc<Mutex<Option<GstGlContext>>> = Arc::new(Mutex::new(None));
+    // player.per_window_data1.per_window_data_set_rendering_notifier();
+    // player.per_window_data2.per_window_data_set_rendering_notifier();
+
     player.per_window_data1.set_appsink_callback();
     player.per_window_data2.set_appsink_callback();
-    set_rendering_notifier(&player.per_window_data1);
-    set_rendering_notifier(&player.per_window_data2);
 
     player.pipeline.set_state(gstreamer::State::Playing).unwrap();
 
