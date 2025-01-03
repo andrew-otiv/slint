@@ -1,5 +1,7 @@
 module(name = "slint_bazel_example")
 
+# new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(
     name = "buildifier_prebuilt",
@@ -50,6 +52,12 @@ crate.spec(package = "i-slint-backend-testing", version = slint_version)  # Must
 # crate.spec(package = "i-slint-backend-testing", git=slint_git_url, rev=slint_revision)  # Must match the slint crate version!
 # crate.spec(package = "slint-build", git = slint_git_url, rev=slint_revision)
 
+
+# new_local_repository(name="aspd_sources", path = "~/src/ashpd")
+# crate.spec(package = "ashpd", path = "@aspd_sources")
+# crate.spec(package = "ashpd", git="ashpd")
+crate.spec(package = "ashpd", version = "0.9.2")
+
 crate.annotation(
     crate = "i-slint-compiler",
     patches = ["@//external_crate_builds:i_slint_compiler.patch"],
@@ -65,12 +73,11 @@ crate.annotation(
     additive_build_file = "@//external_crate_builds:khronos_api_webgl_exts_rs.BUILD.bazel",
     rustc_env = {"WEBGL_EXTS": "$(location :webgl_exts_rs)"},
 )
+# I could not get this patch to add a dependency on zvariant.
 # crate.annotation(
 #     crate = "ashpd",
-#     compile_data = [":cargo_toml"],
-#     # additive_build_file = "@//external_crate_builds:ashpd.BUILD.bazel",
-#     # rustc_env = {"CARGO_MANIFEST_DIR": "$(location :cargo_toml)"},
-#     rustc_env = {"CARGO_MANIFEST_DIR": "$(PWD)/"},
+#     patches = ["@//external_crate_builds:ashpd.patch"],
+#     patch_args = ["-p1"],
 # )
 
 CRATES_REPOSITORY_NAME = "crates"
