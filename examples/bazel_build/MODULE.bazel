@@ -1,14 +1,11 @@
 module(name = "slint_bazel_example")
 
-# new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
-
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(
     name = "buildifier_prebuilt",
     version = "7.3.1",
     dev_dependency = True,
 )
-# bazel_dep(name = "rules_rust", version = "0.54.1")
 bazel_dep(name = "rules_rust", version = "0.56.0")
 bazel_dep(name = "toolchains_llvm", version = "1.1.2")
 
@@ -39,18 +36,18 @@ crate = use_extension(
     "crate",
 )
 
-slint_version = "=1.7.0"
-crate.spec(package = "slint", version = slint_version, default_features = False, features = ["std","backend-winit", "renderer-skia-opengl", "compat-1-2"])
-crate.spec(package = "slint-build", version = slint_version)
-crate.spec(package = "i-slint-backend-winit", version = slint_version)
-crate.spec(package = "i-slint-backend-testing", version = slint_version)  # Must match the slint crate version!
+# slint_version = "=1.7.0"
+# crate.spec(package = "slint", version = slint_version, default_features = False, features = ["std","backend-winit", "renderer-skia-opengl", "compat-1-2"])
+# crate.spec(package = "slint-build", version = slint_version)
+# crate.spec(package = "i-slint-backend-winit", version = slint_version)
+# crate.spec(package = "i-slint-backend-testing", version = slint_version)  # Must match the slint crate version!
 
-# slint_git_url = "https://github.com/slint-ui/slint.git"
-# slint_revision = "27f17676222165bfd0648a213363c1a183ec49ed"
-# crate.spec(package = "slint", git=slint_git_url, rev=slint_revision, default_features = False, features = ["std","backend-winit", "renderer-skia-opengl", "compat-1-2"])
-# crate.spec(package = "i-slint-backend-winit", git=slint_git_url, rev=slint_revision)
-# crate.spec(package = "i-slint-backend-testing", git=slint_git_url, rev=slint_revision)  # Must match the slint crate version!
-# crate.spec(package = "slint-build", git = slint_git_url, rev=slint_revision)
+slint_git_url = "https://github.com/slint-ui/slint.git"
+slint_revision = "27f17676222165bfd0648a213363c1a183ec49ed"
+crate.spec(package = "slint", git=slint_git_url, rev=slint_revision, default_features = False, features = ["std","backend-winit", "renderer-skia-opengl", "compat-1-2"])
+crate.spec(package = "i-slint-backend-winit", git=slint_git_url, rev=slint_revision)
+crate.spec(package = "i-slint-backend-testing", git=slint_git_url, rev=slint_revision)  # Must match the slint crate version!
+crate.spec(package = "slint-build", git = slint_git_url, rev=slint_revision)
 
 
 # new_local_repository(name="aspd_sources", path = "~/src/ashpd")
@@ -73,12 +70,12 @@ crate.annotation(
     additive_build_file = "@//external_crate_builds:khronos_api_webgl_exts_rs.BUILD.bazel",
     rustc_env = {"WEBGL_EXTS": "$(location :webgl_exts_rs)"},
 )
-# I could not get this patch to add a dependency on zvariant.
-# crate.annotation(
-#     crate = "ashpd",
-#     patches = ["@//external_crate_builds:ashpd.patch"],
-#     patch_args = ["-p1"],
-# )
+#I could not get this patch to add a direct dependency on zvariant:
+crate.annotation(
+    crate = "ashpd",
+    patches = ["@//external_crate_builds:ashpd.patch"],
+    patch_args = ["-p1"],
+)
 
 CRATES_REPOSITORY_NAME = "crates"
 crate.from_specs(name = CRATES_REPOSITORY_NAME)
